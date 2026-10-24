@@ -1,0 +1,16 @@
+{
+  "name": "sawedding",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Wedding photo wall: guests upload via QR code, photos appear on a live slideshow.",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy"
+  },
+  "dependencies": {
+    "qrcode-generator": "^1.4.4"
+  },
+  "devDependencies": {
+    "wrangler": "^4.0.0"
+  }
+}

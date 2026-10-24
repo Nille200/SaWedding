@@ -1,0 +1,23 @@
+name = "sawedding"
+main = "src/worker.js"
+compatibility_date = "2025-10-01"
+
+# Pages in /public (upload page, slideshow, QR card, admin) are served as static files.
+[assets]
+directory = "./public"
+binding = "ASSETS"
+
+# Change these to your names and date. They show on every page.
+[vars]
+TITLE = "Our Wedding"
+SUBTITLE = "Share the day with us"
+
+# Where the photos are stored. Create it once with:
+#   npx wrangler r2 bucket create sawedding-photos
+[[r2_buckets]]
+binding = "BUCKET"
+bucket_name = "sawedding-photos"
+
+# Secrets (not stored in this file). Set them once with:
+#   npx wrangler secret put EVENT_CODE   -> goes into the QR code link; stops strangers uploading
+#   npx wrangler secret put ADMIN_KEY    -> password for /admin

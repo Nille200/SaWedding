@@ -1,0 +1,236 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Slideshow</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600&display=swap">
+<link rel="stylesheet" href="/style.css">
+<style>
+  html, body { height: 100%; background: #0b0a09; color: #fff; overflow: hidden; }
+  body.idle { cursor: none; }
+
+  .slide { position: absolute; inset: 0; opacity: 0; transition: opacity 1.4s ease; }
+  .slide.active { opacity: 1; }
+  .slide .bg {
+    position: absolute; inset: -40px; background-size: cover; background-position: center;
+    filter: blur(36px) brightness(.45) saturate(1.1);
+  }
+  .slide .fg {
+    position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain;
+    transform-origin: center;
+  }
+  .slide.active .fg { animation: drift var(--dur, 9s) ease-out forwards; }
+  @keyframes drift { from { transform: scale(1); } to { transform: scale(1.06); } }
+
+  .caption {
+    position: absolute; left: 3vw; bottom: 3vw; max-width: 50vw;
+    font-family: var(--display); font-size: clamp(20px, 2.2vw, 40px);
+    text-shadow: 0 2px 16px rgba(0,0,0,.6);
+    opacity: 0; transition: opacity .8s;
+  }
+  .caption.show { opacity: 1; }
+  .caption .new {
+    display: inline-block; font-family: var(--body); font-size: .45em; letter-spacing: .2em; text-transform: uppercase;
+    padding: .35em .8em; border-radius: 99px; background: rgba(255,255,255,.18); margin-bottom: .4em;
+  }
+
+  .share {
+    position: absolute; right: 2.5vw; bottom: 2.5vw; display: flex; align-items: center; gap: 1.2vw;
+    padding: 1vw; border-radius: 1.2vw; background: rgba(255,255,255,.92); color: #222;
+    box-shadow: 0 8px 40px rgba(0,0,0,.35);
+  }
+  .share img { width: clamp(90px, 9vw, 180px); height: auto; display: block; }
+  .share .txt { font-family: var(--display); font-size: clamp(16px, 1.6vw, 30px); line-height: 1.15; padding-right: .6vw; }
+  .share .txt small { display: block; font-family: var(--body); font-size: .5em; color: #666; margin-top: .4em; letter-spacing: .05em; }
+
+  .empty {
+    position: absolute; inset: 0; display: grid; place-items: center; text-align: center;
+    background: radial-gradient(ellipse at center, #2a2520 0%, #0b0a09 70%);
+  }
+  .empty h1 { font-size: clamp(40px, 6vw, 110px); color: #fff; }
+  .empty p { color: rgba(255,255,255,.7); font-size: clamp(16px, 1.6vw, 28px); margin: .6em 0 1.4em; }
+  .empty img { width: clamp(180px, 20vw, 360px); border-radius: 12px; background: #fff; padding: 10px; }
+  .empty .count { font-size: 14px; color: rgba(255,255,255,.5); margin-top: 1em; }
+
+  .hint {
+    position: absolute; top: 20px; left: 50%; transform: translateX(-50%);
+    background: rgba(0,0,0,.6); padding: 8px 16px; border-radius: 99px; font-size: 14px;
+    transition: opacity .6s;
+  }
+  body.idle .hint { opacity: 0; }
+  .error { position: absolute; inset: 0; display: grid; place-items: center; font-size: 20px; color: #f1b8ae; text-align: center; padding: 20px; }
+</style>
+</head>
+<body>
+  <div class="slide" id="a"><div class="bg"></div><img class="fg" alt=""></div>
+  <div class="slide" id="b"><div class="bg"></div><img class="fg" alt=""></div>
+
+  <div class="caption" id="caption"></div>
+
+  <div class="share hidden" id="share">
+    <img id="qrSmall" alt="QR code">
+    <div class="txt">Share your<br>photos!<small>Scan with your camera</small></div>
+  </div>
+
+  <div class="empty hidden" id="empty">
+    <div>
+      <h1 id="title"></h1>
+      <p>Scan to share your photos. They'll appear right here.</p>
+      <img id="qrBig" alt="QR code">
+    </div>
+  </div>
+
+  <div class="hint" id="hint">Click anywhere for full screen</div>
+  <div class="error hidden" id="error">This slideshow link is missing the event code.<br>Open it from the admin page.</div>
+
+<script>
+(() => {
+  const SLIDE_MS = 9000;      // how long each photo stays up
+  const POLL_MS = 10000;      // how often to check for new photos
+
+  const $ = (s) => document.querySelector(s);
+  const code = new URLSearchParams(location.search).get("c") || "";
+  const q = code ? `?c=${encodeURIComponent(code)}` : "";
+  const photoUrl = (id) => `/photo/${encodeURIComponent(id)}${q}`;
+
+  document.documentElement.style.setProperty("--dur", `${SLIDE_MS / 1000 + 2}s`);
+  $("#qrSmall").src = $("#qrBig").src = `/qr.svg${q}`;
+
+  fetch("/api/config").then((r) => r.json()).then((cfg) => {
+    $("#title").textContent = cfg.title;
+    document.title = `Slideshow · ${cfg.title}`;
+  }).catch(() => {});
+
+  let all = [];          // every photo, oldest first
+  let known = new Set();
+  let fresh = [];        // just uploaded, shown next
+  let order = [], pos = 0;
+  let firstLoad = true;
+  let currentId = null;
+
+  async function poll() {
+    try {
+      const res = await fetch(`/api/photos${q}`, { cache: "no-store" });
+      if (res.status === 401) { $("#error").classList.remove("hidden"); return; }
+      const { photos } = await res.json();
+      const ids = new Set(photos.map((p) => p.id));
+      // drop photos removed in the admin page
+      all = all.filter((p) => ids.has(p.id));
+      fresh = fresh.filter((p) => ids.has(p.id));
+      order = order.filter((p) => ids.has(p.id));
+      pos = Math.min(pos, order.length);
+      known = new Set([...known].filter((id) => ids.has(id)));
+      for (const p of photos) {
+        if (known.has(p.id)) continue;
+        known.add(p.id);
+        all.push(p);
+        if (!firstLoad) fresh.push(p);
+      }
+      firstLoad = false;
+    } catch {}
+  }
+
+  function shuffle(arr) {
+    for (let i = arr.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+    return arr;
+  }
+
+  function nextPhoto() {
+    if (fresh.length) return { photo: fresh.shift(), isNew: true };
+    if (!all.length) return null;
+    if (pos >= order.length) {
+      order = shuffle(all.slice());
+      pos = 0;
+      if (order.length > 1 && order[0].id === currentId) order.push(order.shift());
+    }
+    return { photo: order[pos++], isNew: false };
+  }
+
+  let front = $("#a"), back = $("#b");
+
+  async function show({ photo, isNew }) {
+    const fg = back.querySelector(".fg");
+    const src = photoUrl(photo.id);
+    fg.src = src;
+    await fg.decode();
+    back.querySelector(".bg").style.backgroundImage = `url("${src}")`;
+
+    // restart the slow zoom
+    back.classList.remove("active");
+    void back.offsetWidth;
+    back.classList.add("active");
+    front.classList.remove("active");
+    [front, back] = [back, front];
+    currentId = photo.id;
+
+    const cap = $("#caption");
+    cap.classList.remove("show");
+    setTimeout(() => {
+      cap.innerHTML = "";
+      if (isNew) {
+        const tag = document.createElement("div");
+        tag.className = "new";
+        tag.textContent = "Just shared";
+        cap.append(tag);
+      }
+      if (photo.name) {
+        const who = document.createElement("div");
+        who.textContent = `📷 ${photo.name}`;
+        cap.append(who);
+      }
+      if (cap.childNodes.length) cap.classList.add("show");
+    }, 700);
+  }
+
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+  async function loop() {
+    await poll();
+    setInterval(poll, POLL_MS);
+    while (true) {
+      const next = nextPhoto();
+      const empty = !next;
+      $("#empty").classList.toggle("hidden", !empty);
+      $("#share").classList.toggle("hidden", empty);
+      if (empty) { await sleep(2000); continue; }
+      try {
+        await show(next);
+        await sleep(SLIDE_MS);
+      } catch {
+        await sleep(300); // broken image: skip it
+      }
+    }
+  }
+
+  // Full screen on click, hide cursor when idle, keep the screen awake
+  document.addEventListener("click", () => {
+    if (!document.fullscreenElement) document.documentElement.requestFullscreen?.().catch(() => {});
+    else document.exitFullscreen?.();
+  });
+  let idleTimer;
+  const wake = () => {
+    document.body.classList.remove("idle");
+    clearTimeout(idleTimer);
+    idleTimer = setTimeout(() => document.body.classList.add("idle"), 3000);
+  };
+  document.addEventListener("mousemove", wake);
+  wake();
+
+  let lock = null;
+  async function keepAwake() {
+    try { lock = await navigator.wakeLock?.request("screen"); } catch {}
+  }
+  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") keepAwake(); });
+  keepAwake();
+
+  loop();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>QR card</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600&display=swap">
+<link rel="stylesheet" href="/style.css">
+<style>
+  .toolbar { display: flex; gap: 10px; justify-content: center; padding: 20px; flex-wrap: wrap; }
+  .toolbar .btn { width: auto; min-height: 44px; font-size: 15px; }
+  .sheet { display: grid; gap: 0; justify-content: center; padding: 0 20px 40px; }
+  .sheet.four { grid-template-columns: repeat(2, 105mm); }
+  .card {
+    width: 105mm; height: 148mm; background: var(--card); border: 1px dashed var(--line);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    text-align: center; padding: 10mm;
+  }
+  .card .eyebrow { margin-bottom: 4mm; }
+  .card h1 { font-size: 30pt; }
+  .card .sub { color: var(--muted); font-size: 10pt; margin: 2mm 0 0; }
+  .card img { width: 62mm; height: 62mm; margin: 8mm 0 6mm; }
+  .card .lead { font-family: var(--display); font-size: 17pt; margin: 0; }
+  .card .small { font-size: 9pt; color: var(--muted); margin: 2mm 0 0; }
+  @media print {
+    @page { size: A4; margin: 0; }
+    body { background: #fff; }
+    .toolbar { display: none; }
+    .sheet { padding: 0; }
+    .sheet:not(.four) .card { width: 148mm; height: 210mm; margin: 43mm auto 0; }
+    .sheet:not(.four) .card img { width: 90mm; height: 90mm; }
+    .sheet:not(.four) .card h1 { font-size: 40pt; }
+    .card { border-color: #ddd; }
+  }
+</style>
+</head>
+<body>
+  <div class="toolbar">
+    <button class="btn secondary" id="one">1 large card</button>
+    <button class="btn secondary" id="four">4 table cards per page</button>
+    <button class="btn" onclick="print()">Print</button>
+  </div>
+  <div class="sheet" id="sheet"></div>
+
+  <template id="tpl">
+    <div class="card">
+      <p class="eyebrow">Share your photos</p>
+      <h1 class="t"></h1>
+      <p class="sub s"></p>
+      <img alt="QR code">
+      <p class="lead">Scan with your phone camera</p>
+      <p class="small">No app needed. Your photos go straight to the slideshow.</p>
+    </div>
+  </template>
+
+<script>
+(() => {
+  const code = new URLSearchParams(location.search).get("c") || "";
+  const qr = `/qr.svg${code ? `?c=${encodeURIComponent(code)}` : ""}`;
+  const sheet = document.getElementById("sheet");
+  let cfg = { title: "", subtitle: "" };
+
+  function render(n) {
+    sheet.innerHTML = "";
+    sheet.classList.toggle("four", n === 4);
+    for (let i = 0; i < n; i++) {
+      const card = document.getElementById("tpl").content.cloneNode(true);
+      card.querySelector(".t").textContent = cfg.title;
+      card.querySelector(".s").textContent = cfg.subtitle;
+      card.querySelector("img").src = qr;
+      sheet.append(card);
+    }
+  }
+
+  document.getElementById("one").onclick = () => render(1);
+  document.getElementById("four").onclick = () => render(4);
+
+  fetch("/api/config").then((r) => r.json()).then((c) => { cfg = c; render(1); }).catch(() => render(1));
+})();
+</script>
+</body>
+</html>
