@@ -51,6 +51,7 @@
     <p class="status" id="status"></p>
     <ul class="grid" id="grid"></ul>
     <p class="note" id="hint">Your photos appear on the slideshow within a few seconds.</p>
+    <p class="note" style="font-size:11px;opacity:.5">v2</p>
   </section>
 
   <section id="linkerror" class="hidden">
@@ -153,7 +154,9 @@
         too_large: "That file is too big. Try a photo instead of a screenshot or video.",
         unsupported: "That file type isn't supported. Try a regular photo.",
         rejected: "The server didn't accept it. Try a different photo.",
-      }[lastReason] || `The server had a problem (${lastReason}). Try again in a minute.`;
+      }[lastReason] || (lastReason.startsWith("network")
+        ? `Couldn't reach the server (${lastReason.slice(9)}). Check your connection and try again.`
+        : `The server had a problem (${lastReason}). Try again in a minute.`);
       setStatus(`${failed} photo${failed > 1 ? "s" : ""} didn't upload. ${why}`, "err");
     } else {
       setStatus("Thank you! Your photos are on their way to the big screen.", "ok");
@@ -216,7 +219,7 @@
         lastError = `server_${res.status}`;
       } catch (err) {
         if (["bad_code", "rejected", "too_large"].includes(err.message)) throw err;
-        if (!String(err.message).startsWith("server_")) lastError = "network";
+        if (!String(err.message).startsWith("server_")) lastError = `network: ${err.message}`;
       }
       await new Promise((r) => setTimeout(r, 1500 * (attempt + 1)));
     }
