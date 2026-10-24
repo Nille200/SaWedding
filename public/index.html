@@ -89,7 +89,7 @@
   const status = $("#status");
   let queue = [];
   let running = false;
-  let total = 0, finished = 0, failed = 0;
+  let total = 0, finished = 0, failed = 0, lastReason = "";
 
   input.addEventListener("change", () => {
     const files = [...input.files];
@@ -134,6 +134,7 @@
         li.querySelector(".badge").textContent = "✓";
       } catch (err) {
         failed++;
+        lastReason = err?.message || "network";
         li.className = "fail";
         li.querySelector(".badge").textContent = "!";
         if (err && err.message === "bad_code") {
@@ -147,38 +148,56 @@
     }
     running = false;
     if (failed) {
-      setStatus(`${failed} photo${failed > 1 ? "s" : ""} didn't upload. Check your connection and try those again.`, "err");
+      const why = {
+        network: "Check your connection and try those again.",
+        too_large: "That file is too big. Try a photo instead of a screenshot or video.",
+        unsupported: "That file type isn't supported. Try a regular photo.",
+        rejected: "The server didn't accept it. Try a different photo.",
+      }[lastReason] || `The server had a problem (${lastReason}). Try again in a minute.`;
+      setStatus(`${failed} photo${failed > 1 ? "s" : ""} didn't upload. ${why}`, "err");
     } else {
       setStatus("Thank you! Your photos are on their way to the big screen.", "ok");
     }
     failed = 0;
   }
 
-  // Shrink big phone photos before upload: faster on venue wifi, and converts HEIC to JPEG.
+  // Shrink big phone photos before upload: faster on venue wifi, converts HEIC to JPEG,
+  // and keeps each upload under the server's 4.4 MB limit.
+  const MAX_BYTES = 4_000_000;
   async function prepare(file) {
-    const MAX = 2400;
-    if (file.type === "image/gif") return file;
+    if (file.type === "image/gif") {
+      if (file.size <= MAX_BYTES) return file;
+      throw new Error("too_large");
+    }
+    let img, url;
     try {
-      const url = URL.createObjectURL(file);
-      const img = new Image();
+      url = URL.createObjectURL(file);
+      img = new Image();
       img.src = url;
       await img.decode();
-      const scale = Math.min(1, MAX / Math.max(img.naturalWidth, img.naturalHeight));
+    } catch {
+      throw new Error("unsupported");
+    }
+    let edge = 2400, quality = 0.86;
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const scale = Math.min(1, edge / Math.max(img.naturalWidth, img.naturalHeight));
       const canvas = document.createElement("canvas");
       canvas.width = Math.round(img.naturalWidth * scale);
       canvas.height = Math.round(img.naturalHeight * scale);
       canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
-      URL.revokeObjectURL(url);
-      const out = await new Promise((res) => canvas.toBlob(res, "image/jpeg", 0.86));
-      if (out) return out;
-    } catch {}
-    if (["image/jpeg", "image/png", "image/webp"].includes(file.type)) return file;
-    throw new Error("unsupported");
+      const out = await new Promise((res) => canvas.toBlob(res, "image/jpeg", quality));
+      if (out && out.size <= MAX_BYTES) { URL.revokeObjectURL(url); return out; }
+      edge = Math.round(edge * 0.8);
+      quality = Math.max(0.6, quality - 0.08);
+    }
+    URL.revokeObjectURL(url);
+    throw new Error("too_large");
   }
 
   async function send(blob) {
     const name = nameInput.value.trim();
     store.set("guestName", name);
+    let lastError = "network";
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
         const res = await fetch("/api/upload", {
@@ -192,13 +211,16 @@
         });
         if (res.status === 401) throw new Error("bad_code");
         if (res.ok) return;
+        if (res.status === 413) throw new Error("too_large");
         if (res.status < 500) throw new Error("rejected");
+        lastError = `server_${res.status}`;
       } catch (err) {
-        if (err.message === "bad_code" || err.message === "rejected") throw err;
+        if (["bad_code", "rejected", "too_large"].includes(err.message)) throw err;
+        if (!String(err.message).startsWith("server_")) lastError = "network";
       }
       await new Promise((r) => setTimeout(r, 1500 * (attempt + 1)));
     }
-    throw new Error("failed");
+    throw new Error(lastError);
   }
 })();
 </script>

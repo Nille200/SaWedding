@@ -94,7 +94,6 @@
   const $ = (s) => document.querySelector(s);
   const code = new URLSearchParams(location.search).get("c") || "";
   const q = code ? `?c=${encodeURIComponent(code)}` : "";
-  const photoUrl = (id) => `/photo/${encodeURIComponent(id)}${q}`;
 
   document.documentElement.style.setProperty("--dur", `${SLIDE_MS / 1000 + 2}s`);
   $("#qrSmall").src = $("#qrBig").src = `/qr.svg${q}`;
@@ -156,7 +155,7 @@
 
   async function show({ photo, isNew }) {
     const fg = back.querySelector(".fg");
-    const src = photoUrl(photo.id);
+    const src = photo.url;
     fg.src = src;
     await fg.decode();
     back.querySelector(".bg").style.backgroundImage = `url("${src}")`;

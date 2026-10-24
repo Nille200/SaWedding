@@ -70,7 +70,7 @@
   fetch("/api/config").then((r) => r.json()).then((c) => { $("#title").textContent = c.title; }).catch(() => {});
 
   async function open() {
-    const res = await fetch("/api/admin/info", { headers: { "x-admin-key": key } });
+    const res = await fetch("/api/admin", { headers: { "x-admin-key": key } });
     if (!res.ok) {
       $("#loginErr").textContent = key ? "That key didn't work." : "";
       store.del("adminKey");
@@ -92,14 +92,13 @@
     const { photos } = await res.json();
     photos.reverse(); // newest first
     $("#count").textContent = `${photos.length} photo${photos.length === 1 ? "" : "s"}`;
-    const q = code ? `?c=${encodeURIComponent(code)}` : "";
     const grid = $("#grid");
     grid.innerHTML = "";
     for (const p of photos) {
       const tile = document.createElement("div");
       tile.className = "tile";
       const link = document.createElement("a");
-      link.href = `/photo/${encodeURIComponent(p.id)}${q}`;
+      link.href = p.url;
       link.target = "_blank";
       const img = document.createElement("img");
       img.loading = "lazy";
@@ -114,7 +113,7 @@
       del.textContent = "Remove";
       del.onclick = async () => {
         if (!confirm("Remove this photo from the slideshow? This can't be undone.")) return;
-        const r = await fetch(`/api/photos/${encodeURIComponent(p.id)}`, { method: "DELETE", headers: { "x-admin-key": key } });
+        const r = await fetch(`/api/photos?url=${encodeURIComponent(p.url)}`, { method: "DELETE", headers: { "x-admin-key": key } });
         if (r.ok) load(); else alert("Couldn't remove it. Try again.");
       };
       tile.append(link, meta, del);
