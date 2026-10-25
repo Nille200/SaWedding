@@ -220,7 +220,8 @@
         if (res.ok) return;
         if (res.status === 413) throw new Error("too_large");
         if (res.status < 500) throw new Error("rejected");
-        lastError = `server_${res.status}`;
+        const { error, detail } = await res.json().catch(() => ({}));
+        lastError = `server_${res.status}${detail || error ? `: ${detail || error}` : ""}`;
       } catch (err) {
         if (["bad_code", "rejected", "too_large"].includes(err.message)) throw err;
         if (!String(err.message).startsWith("server_")) lastError = `network: ${err.message}`;
