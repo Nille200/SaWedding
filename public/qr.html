@@ -6,7 +6,7 @@
 <meta name="robots" content="noindex">
 <title>QR card</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gilda+Display&family=Ms+Madi&display=swap">
 <link rel="stylesheet" href="/style.css">
 <style>
   .toolbar { display: flex; gap: 10px; justify-content: center; padding: 20px; flex-wrap: wrap; }
@@ -14,15 +14,16 @@
   .sheet { display: grid; gap: 0; justify-content: center; padding: 0 20px 40px; }
   .sheet.four { grid-template-columns: repeat(2, 105mm); }
   .card {
-    width: 105mm; height: 148mm; background: var(--card); border: 1px dashed var(--line);
+    position: relative; width: 105mm; height: 148mm; background: var(--paper); border: 1px dashed var(--line);
     display: flex; flex-direction: column; align-items: center; justify-content: center;
-    text-align: center; padding: 10mm;
+    text-align: center; padding: 10mm; -webkit-print-color-adjust: exact; print-color-adjust: exact;
   }
-  .card .eyebrow { margin-bottom: 4mm; }
-  .card h1 { font-size: 30pt; }
-  .card .sub { color: var(--muted); font-size: 10pt; margin: 2mm 0 0; }
-  .card img { width: 62mm; height: 62mm; margin: 8mm 0 6mm; }
-  .card .lead { font-family: var(--display); font-size: 17pt; margin: 0; }
+  .card::before { content: ""; position: absolute; inset: 5mm; border: 1px solid var(--ink); opacity: .35; pointer-events: none; }
+  .card .eyebrow { margin: 0; font-size: 8pt; }
+  .card h1 { font-family: var(--script); font-size: 40pt; line-height: 1.15; white-space: nowrap; }
+  .card .sub { color: var(--muted); font-size: 10pt; letter-spacing: .04em; margin: 0 0 1mm; }
+  .card img { width: 62mm; height: 62mm; margin: 6mm 0 5mm; }
+  .card .lead { font-family: var(--display); font-size: 16pt; margin: 0; }
   .card .small { font-size: 9pt; color: var(--muted); margin: 2mm 0 0; }
   @media print {
     @page { size: A4; margin: 0; }
@@ -31,7 +32,8 @@
     .sheet { padding: 0; }
     .sheet:not(.four) .card { width: 148mm; height: 210mm; margin: 43mm auto 0; }
     .sheet:not(.four) .card img { width: 90mm; height: 90mm; }
-    .sheet:not(.four) .card h1 { font-size: 40pt; }
+    .sheet:not(.four) .card h1 { font-size: 58pt; }
+    .sheet:not(.four) .card .eyebrow { font-size: 11pt; }
     .card { border-color: #ddd; }
   }
 </style>
