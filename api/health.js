@@ -5,6 +5,10 @@ import { settings, json } from "../lib/common.js";
 export async function GET() {
   const s = settings();
   const report = {
+    environment: process.env.VERCEL_ENV || "unknown",
+    branch: process.env.VERCEL_GIT_COMMIT_REF || "unknown",
+    // Names only, never values: shows a misspelled or prefixed token variable
+    blobVariables: Object.keys(process.env).filter((k) => /blob|token/i.test(k) && !k.startsWith("VERCEL_")),
     blobStoreConnected: Boolean(process.env.BLOB_READ_WRITE_TOKEN),
     eventCodeSet: Boolean(s.eventCode),
     adminKeySet: Boolean(s.adminKey),
