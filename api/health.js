@@ -2,12 +2,9 @@ import { list } from "@vercel/blob";
 import { settings, json } from "../lib/common.js";
 
 // Open /api/health in a browser to check the setup. Shows no secrets.
-export const VERSION = "vercel-2";
-
 export async function GET() {
   const s = settings();
   const report = {
-    version: VERSION,
     blobStoreConnected: Boolean(process.env.BLOB_READ_WRITE_TOKEN),
     eventCodeSet: Boolean(s.eventCode),
     adminKeySet: Boolean(s.adminKey),

@@ -43,13 +43,15 @@ It runs on Vercel: static pages in `public/`, Vercel Functions in `api/`, and ph
 
 ## After the wedding: download every photo
 
-In Vercel, open **Storage → your Blob store**, where you can browse and download files one by one. To download everything at once, ask Claude to add a small download script.
+In `/admin`, choose **Download all**. It saves every photo into one zip file, named by time and guest, like `2027-06-12_213045_Lisa_3fa8c21b.jpg`. Chrome and Edge ask where to save and write straight to disk, so even thousands of photos are fine. Other browsers build the zip in memory first, so use Chrome or Edge for a big wedding.
+
+You can also browse and download files one by one under **Storage → your Blob store** in Vercel.
 
 ## Good to know
 
 - **Privacy:** the photo list and uploads need the event code from the QR link. Each photo's own address is public but random and unguessable, so it's only visible to people who were given it.
 - **Size:** phone photos are shrunk to at most 2400px and under 4 MB on the guest's phone before upload. That keeps uploads fast and fits Vercel's 4.5 MB limit per request. iPhone HEIC photos become JPEG.
 - **Free tier:** the free (Hobby) plan includes 1 GB of Blob storage, about 1,000 photos. Check your usage in the Storage tab, or upgrade the plan for a big wedding.
-- **Removing a photo** in `/admin` takes it off the slideshow within about 10 seconds.
-- **Timing:** each photo shows for 9 seconds. Change `SLIDE_MS` at the top of the script in `public/slideshow.html`.
+- **Removing a photo** in `/admin` takes it off the slideshow within about 30 seconds.
+- **Timing:** each photo shows for 9 seconds, and the slideshow checks for new photos every 30 seconds. Change `SLIDE_MS` and `POLL_MS` at the top of the script in `public/slideshow.html`.
 - **Colors and fonts** are at the top of `public/style.css`.

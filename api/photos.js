@@ -38,6 +38,11 @@ export async function DELETE(req) {
   if (!u.hostname.endsWith(".blob.vercel-storage.com") || !ID_RE.test(id)) {
     return json({ error: "bad_url" }, 400);
   }
-  await del(u.toString());
-  return json({ ok: true });
+  try {
+    await del(u.toString());
+    return json({ ok: true });
+  } catch (err) {
+    console.error("blob delete failed", err);
+    return json({ error: "storage_failed", detail: String(err?.message || err) }, 500);
+  }
 }

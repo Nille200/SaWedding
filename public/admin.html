@@ -14,6 +14,7 @@
   .links a { min-height: 48px; font-size: 15px; }
   .bar { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin: 28px 0 12px; }
   .bar h2 { font-family: var(--display); font-weight: 500; font-size: 28px; margin: 0; }
+  .bar .actions { display: flex; gap: 8px; }
   .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
   .tile { position: relative; aspect-ratio: 1; border-radius: 10px; overflow: hidden; background: var(--line); }
   .tile img { width: 100%; height: 100%; object-fit: cover; display: block; }
@@ -50,8 +51,12 @@
     </div>
     <div class="bar">
       <h2 id="count">Photos</h2>
-      <button class="btn secondary" id="logout" style="width:auto;min-height:40px">Log out</button>
+      <div class="actions">
+        <button class="btn" id="zip" style="width:auto;min-height:40px">Download all</button>
+        <button class="btn secondary" id="logout" style="width:auto;min-height:40px">Log out</button>
+      </div>
     </div>
+    <p class="note" id="zipStatus"></p>
     <div class="grid" id="grid"></div>
   </section>
 </main>
@@ -66,6 +71,7 @@
   };
   let key = store.get("adminKey") || "";
   let code = "";
+  let zipping = false;
 
   fetch("/api/config").then((r) => r.json()).then((c) => { $("#title").textContent = c.title; }).catch(() => {});
 
@@ -113,14 +119,97 @@
       del.textContent = "Remove";
       del.onclick = async () => {
         if (!confirm("Remove this photo from the slideshow? This can't be undone.")) return;
-        const r = await fetch(`/api/photos?url=${encodeURIComponent(p.url)}`, { method: "DELETE", headers: { "x-admin-key": key } });
-        if (r.ok) load(); else alert("Couldn't remove it. Try again.");
+        del.disabled = true;
+        try {
+          const r = await fetch(`/api/photos?url=${encodeURIComponent(p.url)}`, { method: "DELETE", headers: { "x-admin-key": key } });
+          if (r.ok) return load();
+          const { detail } = await r.json().catch(() => ({}));
+          alert(`Couldn't remove it${detail ? ` (${detail})` : ""}. Try again.`);
+        } catch {
+          alert("Couldn't reach the server. Check your connection and try again.");
+        }
+        del.disabled = false;
       };
       tile.append(link, meta, del);
       grid.append(tile);
     }
   }
 
+  // Zip every photo in the browser, fetching one at a time so memory stays low.
+  // Chrome and Edge stream the zip straight to disk; other browsers build it in memory first.
+  function zipName(p) {
+    const d = new Date(p.t);
+    const pad = (n) => String(n).padStart(2, "0");
+    const stamp = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
+    const who = p.name.replace(/[^\p{L}\p{N} _-]/gu, "").trim().replace(/\s+/g, "-").slice(0, 40);
+    const [, rand, ext] = p.id.match(/^\d{13}-([0-9a-f]{8}).*\.(\w+)$/);
+    return `${stamp}${who ? `_${who}` : ""}_${rand}.${ext}`;
+  }
+
+  async function downloadAll() {
+    if (zipping) return;
+    const status = $("#zipStatus");
+    const res = await fetch("/api/photos", { headers: { "x-admin-key": key }, cache: "no-store" }).catch(() => null);
+    if (!res?.ok) { status.textContent = "Couldn't load the photo list. Try again."; return; }
+    const { photos } = await res.json();
+    if (!photos.length) { status.textContent = "There are no photos yet."; return; }
+
+    const filename = `${($("#title").textContent.trim() || "wedding").replace(/[^\p{L}\p{N} &_-]/gu, "")} photos.zip`;
+    let writable = null;
+    if (window.showSaveFilePicker) {
+      try {
+        const handle = await showSaveFilePicker({ suggestedName: filename, types: [{ description: "Zip file", accept: { "application/zip": [".zip"] } }] });
+        writable = await handle.createWritable();
+      } catch (err) {
+        if (err.name === "AbortError") return; // picker cancelled
+      }
+    }
+
+    zipping = true;
+    $("#zip").disabled = true;
+    let done = 0;
+    const failed = [];
+    async function* files() {
+      for (const p of photos) {
+        status.textContent = `Downloading ${done + 1} of ${photos.length}…`;
+        try {
+          const r = await fetch(p.url);
+          if (!r.ok) throw new Error(r.status);
+          yield { name: zipName(p), lastModified: new Date(p.t), input: r };
+        } catch {
+          failed.push(p);
+        }
+        done++;
+      }
+    }
+
+    try {
+      const { downloadZip } = await import("https://cdn.jsdelivr.net/npm/client-zip@2.4.5/index.js");
+      const zip = downloadZip(files());
+      if (writable) {
+        await zip.body.pipeTo(writable);
+      } else {
+        const url = URL.createObjectURL(await zip.blob());
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = filename;
+        a.click();
+        setTimeout(() => URL.revokeObjectURL(url), 60000);
+      }
+      const saved = photos.length - failed.length;
+      status.textContent = failed.length
+        ? `Saved ${saved} of ${photos.length} photos. ${failed.length} couldn't be fetched; try again or open them from the grid.`
+        : `Saved all ${saved} photos to ${filename}.`;
+    } catch (err) {
+      writable?.abort().catch(() => {});
+      status.textContent = `The download stopped (${err?.message || err}). Try again.`;
+    } finally {
+      zipping = false;
+      $("#zip").disabled = false;
+    }
+  }
+
+  $("#zip").onclick = downloadAll;
   $("#go").onclick = () => { key = $("#key").value.trim(); open(); };
   $("#key").addEventListener("keydown", (e) => { if (e.key === "Enter") $("#go").click(); });
   $("#logout").onclick = () => { store.del("adminKey"); location.reload(); };
